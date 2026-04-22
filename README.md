@@ -24,9 +24,10 @@ A typical OPD step is:
 ```
 
 The framework unifies many recent ideas — GKD, MiniLLM, SDFT, SDPO, DASD,
-MOPD, OPSD, OPCD, Cascade Distillation, SKD / SpecKD — and has been adopted
-in the post-training recipes of **Qwen3**, **MiMo-V2-Flash**, **Ministral 3**,
-**DASD-4B-Thinking**, and many others.
+MOPD, OPSD, OPCD, TAID, SPIN, Cascade Distillation, SKD / SpecKD,
+**On-Policy Cross-Stage Distillation (OPCSD)** — and has been adopted
+in the post-training recipes of **GLM-5**, **Qwen3**, **MiMo-V2-Flash**,
+**Ministral 3**, **DASD-4B-Thinking**, **Gemma 3**, and many others.
 
 ---
 
@@ -51,6 +52,9 @@ blog directly, and place each work in the most specific subsection.
   - [Context Distillation on Student Rollouts](#context-distillation-on-student-rollouts)
   - [Multi-Teacher On-Policy Distillation](#multi-teacher-on-policy-distillation)
   - [Strong-to-Weak Distillation Pipelines](#strong-to-weak-distillation-pipelines)
+  - [Cross-Stage / Anti-Forgetting Distillation](#cross-stage--anti-forgetting-distillation)
+  - [Interpolated / Curriculum Distillation](#interpolated--curriculum-distillation)
+  - [Self-Play as Implicit On-Policy Distillation](#self-play-as-implicit-on-policy-distillation)
   - [Cascade / Pruning + Distillation](#cascade--pruning--distillation)
   - [RL × Distillation Connections (Inverse RL, Imitation)](#rl--distillation-connections-inverse-rl-imitation)
 - [Applications](#applications)
@@ -101,17 +105,26 @@ blog directly, and place each work in the most specific subsection.
 
 ### Mechanism & Phenomenology Studies
 
-- **Bingxiang He et al. Rethinking On-Policy Distillation of Large Language
-  Models: Phenomenology, Mechanism, and Recipe.** arXiv, Apr 2026.
-  [[arXiv:2604.13016]](https://arxiv.org/abs/2604.13016)
-  *Identifies two conditions that govern OPD success: (i) the student and
-  teacher must share **compatible thinking patterns**, and (ii) even with
-  consistent patterns, teacher–student **score gap** matters. Shows that
-  successful OPD is characterized by progressive alignment on
+- **Yaxuan Li, Yuxin Zuo, Bingxiang He et al. Rethinking On-Policy
+  Distillation of Large Language Models: Phenomenology, Mechanism, and
+  Recipe.** arXiv, Apr 2026 (THUNLP).
+  [[arXiv:2604.13016]](https://arxiv.org/abs/2604.13016) ·
+  [[Code]](https://github.com/thunlp/OPD)
+  *The first systematic investigation of **OPD training dynamics**.
+  Identifies two conditions that govern OPD success: (i) student and teacher
+  must share **compatible thinking patterns**, and (ii) even with consistent
+  patterns and higher teacher scores, the teacher must offer **genuinely new
+  capabilities** beyond what the student has seen during training. Validated
+  via **weak-to-strong reverse distillation**: same-family 1.5B and 7B
+  teachers are *distributionally indistinguishable* from the student's
+  perspective, so naively distilling from a "stronger" same-family model can
+  fail. At the token level, successful OPD shows progressive alignment on
   high-probability tokens at student-visited states, with a **small shared
-  token set concentrating 97–99 % of the probability mass**. Proposes two
-  rescue strategies for failing runs: **off-policy cold start** and
-  **teacher-aligned prompt selection**.*
+  token set (97–99 % of the probability mass)** doing all the work. Proposes
+  two rescue strategies for failing runs — **off-policy cold start** and
+  **teacher-aligned prompt selection** — and warns that OPD's "free lunch"
+  of dense token-level reward **does not obviously scale to long-horizon
+  distillation**. The paper that crystallizes the OPD design space.*
 
 - **Siyan Zhao et al. "Style tokens dominate the OPD training signal."**
   Finding from OPSD v3 ([arXiv:2601.18734v3](https://arxiv.org/abs/2601.18734v3), Mar 2026).
@@ -171,6 +184,18 @@ blog directly, and place each work in the most specific subsection.
   AISTATS, 2019. *— unifies policy distillation, DAgger and KD into a common
   expected-divergence framework.*
 
+- Yee Whye Teh et al. **Distral: Robust Multitask Reinforcement Learning.**
+  NeurIPS, 2017. [[arXiv:1707.04175]](https://arxiv.org/abs/1707.04175)
+  *— distills a shared "centroid" policy from multiple task-specific policies
+  via KL regularization; the spiritual ancestor of **Multi-Teacher On-Policy
+  Distillation** (MOPD) for LLMs.*
+
+- Emilio Parisotto, Jimmy Lei Ba, Ruslan Salakhutdinov. **Actor-Mimic:
+  Deep Multitask and Transfer Reinforcement Learning.** ICLR, 2016.
+  [[arXiv:1511.06342]](https://arxiv.org/abs/1511.06342)
+  *— pre-dates Policy Distillation by a few months and introduces the idea of
+  mimicking multiple expert Q-networks on-policy, another root of MOPD.*
+
 ---
 
 ## Methods
@@ -227,6 +252,18 @@ blog directly, and place each work in the most specific subsection.
 - Yiming Zhang et al. **Self-Knowledge Distillation: A Simple Way for Better
   Generalization.** [[arXiv:2006.12000]](https://arxiv.org/abs/2006.12000)
 
+- **SPIN — Self-Play Fine-Tuning** (UCLA, ICML 2024)
+  Zixiang Chen, Yihe Deng, Huizhuo Yuan, Kaixuan Ji, Quanquan Gu.
+  **Self-Play Fine-Tuning Converts Weak Language Models to Strong Language
+  Models.** [[arXiv:2401.01335]](https://arxiv.org/abs/2401.01335) ·
+  [[Code]](https://github.com/uclaml/SPIN)
+  *Iterative self-play: the model at iteration t-1 generates its **own
+  responses**, and iteration t is trained with a DPO-like objective that
+  pushes the model to prefer human responses over its own previous
+  generations. Mathematically equivalent to an **adversarial self-distillation**
+  loop — a strict precursor to OPSD/SDFT, and empirically out-performs
+  DPO on MT-Bench / Open LLM Leaderboard without any extra preference data.*
+
 ### On-Policy KD from a Larger Teacher
 
 > The student rolls out, a **separate (usually larger)** teacher provides
@@ -263,6 +300,9 @@ blog directly, and place each work in the most specific subsection.
   [[Code]](https://github.com/EIT-NLP/Distilling-CoT-Reasoning)
   *— empirically shows **stronger teachers are not always better** for SLMs;
   motivates teacher-aligned prompt selection in later OPD works.*
+
+- **TAID — Temporally Adaptive Interpolated Distillation** (Sakana AI,
+  ICLR 2025) — see [Interpolated / Curriculum Distillation](#interpolated--curriculum-distillation).
 
 ### Speculative / Hybrid Student-Teacher Sampling
 
@@ -355,6 +395,106 @@ blog directly, and place each work in the most specific subsection.
 - Xiaohan Yuan et al. **Weak-to-Strong Reasoning Distillation.** 2026
   (community follow-ups to Qwen3's recipe).
 
+- **Gemma 2 / Gemma 3** (Google DeepMind, 2024–2025)
+  [[Gemma 2 TR]](https://storage.googleapis.com/deepmind-media/gemma/gemma-2-report.pdf) ·
+  [[Gemma 3 TR (arXiv:2503.19786)]](https://arxiv.org/abs/2503.19786)
+  *Two successive flagship open-weight families trained with distillation at
+  unprecedented scale. **Pre-training**: 2B / 9B / 27B students learn from a
+  large Gemini teacher via token-level cross-entropy over **256 sampled
+  logits** per token, weighted by teacher probabilities — allowing students
+  to see **>50× the compute-optimal token budget**. **Post-training (Gemma 3)**:
+  combines improved KD from a large IT teacher with **BOND / WARM / WARP**
+  RL fine-tuning, closely mirroring the Agarwal-et-al. GKD recipe. The
+  resulting Gemma-3-4B-IT matches Gemma-2-27B-IT; Gemma-3-27B-IT is
+  competitive with Gemini-1.5-Pro.*
+
+- **Kimi K2 / K1.5** (Moonshot AI, 2025–2026) — 1T-total / 32B-active MoE
+  agentic model. [[arXiv:2507.20534]](https://arxiv.org/abs/2507.20534) ·
+  [[Code]](https://github.com/MoonshotAI/Kimi-K2)
+  *Post-training uses a **joint RL + rubric-distillation** loop: verifiable
+  rewards (RLVR) iteratively update an on-policy critic whose judgments are
+  then **distilled into the policy** on non-verifiable tasks (creative
+  writing, complex judgment). A de-facto large-scale realization of
+  SDPO-style dense feedback distillation at trillion-parameter scale.*
+
+### Cross-Stage / Anti-Forgetting Distillation
+
+> Use **earlier checkpoints of the same model family** as teachers for the
+> current training stage. Crucial when running sequential RL pipelines
+> (Reasoning → Agentic → General) that would otherwise forget earlier skills.
+
+- **GLM-5 — On-Policy Cross-Stage Distillation (OPCSD)** (Z.ai / Tsinghua, 2026)
+  GLM-5 Team. **GLM-5: from Vibe Coding to Agentic Engineering.**
+  [[arXiv:2602.15763]](https://arxiv.org/abs/2602.15763) ·
+  [[Code]](https://github.com/zai-org/GLM-5)
+  *The flagship demonstration of OPD as a **first-class building block of
+  the post-training pipeline of a frontier model**. GLM-5 (744B-A40B MoE)
+  runs a sequential RL cascade — multi-task SFT → **Reasoning RL** →
+  **Agentic RL** → **General RL** — and, between every two stages,
+  performs **On-Policy Cross-Stage Distillation**: the student rolls out
+  under the new stage's policy while being scored by a **teacher checkpoint
+  from an earlier stage** (typically SFT or Reasoning-RL). Advantage signals
+  are derived from **teacher–student logit gaps**, not just scalar rewards.
+  The effect: catastrophic forgetting is suppressed and GLM-5 retains its
+  sharp reasoning edge while building agentic robustness, narrowing the gap
+  with Claude Opus 4.5 on long-horizon tasks. **The first open tech report
+  to name and operationalize OPD as an anti-forgetting mechanism across RL
+  stages — a paradigm we refer to as OPCSD.***
+
+- **Thinking Machines — Personalization without Forgetting.**
+  [[Blog]](https://thinkingmachines.ai/blog/on-policy-distillation)
+  *Complementary empirical result at smaller scale: applying OPD between a
+  base-model teacher and a personalization-fine-tuned student recovers the
+  lost general capabilities without re-running RL. A 1-instance-of-GLM-5
+  lesson.*
+
+- See also **SDFT** ([arXiv:2601.19897](https://arxiv.org/abs/2601.19897))
+  in [Self-Distillation](#self-distillation-as-on-policy-learning) — the
+  algorithmic core of cross-stage self-teaching.
+
+### Interpolated / Curriculum Distillation
+
+> Instead of a fixed teacher, dynamically **interpolate** between the
+> student's own distribution and the teacher's, forming a curriculum of
+> intermediate targets. Bridges the capacity gap without mode collapse.
+
+- **TAID — Temporally Adaptive Interpolated Distillation** (Sakana AI,
+  ICLR 2025)
+  Makoto Shing, Kou Misaki, Han Bao, Sho Yokoi, Takuya Akiba.
+  [[arXiv:2501.16937]](https://arxiv.org/abs/2501.16937) ·
+  [[Code]](https://github.com/SakanaAI/TAID)
+  *Defines a time-dependent intermediate distribution
+  \(p_t = (1-\alpha_t) q_\theta + \alpha_t p_T\) that **starts at the student
+  and gradually shifts to the teacher**. Proved (under a regression proxy)
+  to prevent mode collapse, and empirically beats reverse-KL, forward-KL,
+  f-divergence, MiniLLM and DistiLLM across sizes / architectures.
+  Produces **TAID-LLM-1.5B** (SOTA <2B English LM) and **TAID-VLM-2B**
+  (SOTA VLM ≤4B). A crucial missing piece in the OPD × curriculum-learning
+  intersection.*
+
+- **Born-Again Networks (self-interpolation interpretation)** — see
+  [Foundational Papers](#foundational-papers).
+
+### Self-Play as Implicit On-Policy Distillation
+
+> When a model plays against itself or its own past, the resulting training
+> signal is mathematically equivalent to distilling a *conditional* version
+> of the model back into the *unconditional* one — i.e., on-policy
+> self-distillation with an implicit teacher.
+
+- **SPIN** (UCLA, ICML 2024) — *primary work*, listed in detail under
+  [Self-Distillation as On-Policy Learning](#self-distillation-as-on-policy-learning).
+
+- **Self-Rewarding Language Models** (Meta, 2024) —
+  [[arXiv:2401.10020]](https://arxiv.org/abs/2401.10020)
+  *Uses the model as its own judge and distills the preference signal into
+  the next iteration; closely related to SPIN + SDPO.*
+
+- **Meta-Rewarding LLMs** (Meta, 2024) —
+  [[arXiv:2407.19594]](https://arxiv.org/abs/2407.19594)
+  *Extends self-rewarding by additionally judging the judge, producing a
+  two-level on-policy distillation loop.*
+
 ### Cascade / Pruning + Distillation
 
 - **Cascade Distillation** (Mistral AI, 2026)
@@ -422,6 +562,10 @@ blog directly, and place each work in the most specific subsection.
 
 ### Continual Learning & Catastrophic Forgetting
 
+- **GLM-5 OPCSD** — frontier-scale evidence that **On-Policy Cross-Stage
+  Distillation** can eliminate inter-stage capability regression across a
+  3-phase RL pipeline (Reasoning → Agentic → General).
+  [[arXiv:2602.15763]](https://arxiv.org/abs/2602.15763)
 - **SDFT** — establishes OPD as a *practical path* to continual learning from
   demonstrations. [[arXiv:2601.19897]](https://arxiv.org/abs/2601.19897)
 - **Thinking Machines Assistant Personalization** — the Thinking Machines
@@ -435,11 +579,22 @@ blog directly, and place each work in the most specific subsection.
 
 ### Model Compression / Small Language Models
 
+- **TAID-LLM-1.5B / TAID-VLM-2B** (Sakana AI, ICLR 2025) — SOTA <2B models
+  via **Temporally Adaptive Interpolated Distillation**.
+  [[arXiv:2501.16937]](https://arxiv.org/abs/2501.16937)
+- **Gemma 3** (1B / 4B / 12B / 27B) — KD during pre-training + OPD-style
+  post-training. [[arXiv:2503.19786]](https://arxiv.org/abs/2503.19786)
+- **Gemma 2** (2B / 9B / 27B) — the first widely-adopted frontier open-weight
+  family to scale knowledge distillation to trillions of tokens.
 - **Ministral 3** (Cascade Distillation, 3B / 8B / 14B).
   [[arXiv:2601.08584]](https://arxiv.org/abs/2601.08584)
 - **Qwen3-0.6B / 1.7B / 4B / 8B / 14B** (Strong-to-Weak OPD).
 - **Minitron / Llama-3.1-Minitron** (Pruning + KD).
-- **MiniCPM, Phi-3, Gemma-2** — community recipes that increasingly resemble
+- **Phi-4 / Phi-4-Reasoning** (Microsoft, 2024–2026) — synthetic-data-heavy
+  14 B model. Phi-1/2/3 explicitly distilled GPT-4; Phi-4 transitions from
+  *distillation* to *synthetic data generated by a teacher*, surpassing the
+  teacher on STEM QA. [[arXiv:2412.08905]](https://arxiv.org/abs/2412.08905)
+- **MiniCPM-4, Phi-3, Gemma-2** — community recipes that increasingly resemble
   OPD.
 - **MobileLLM**, **OLMoE-1B-7B** — small-model technical reports with KD
   ablations relevant to OPD.
@@ -459,14 +614,21 @@ blog directly, and place each work in the most specific subsection.
 
 | Model | Year | Distillation Recipe | Link |
 |------|------|--------------------|------|
+| **GLM-5 / GLM-5.1** (744B-A40B MoE) | 2026 | **On-Policy Cross-Stage Distillation (OPCSD)** across Reasoning → Agentic → General RL | [arXiv:2602.15763](https://arxiv.org/abs/2602.15763) |
 | **DASD-4B-Thinking** | 2026 | Distribution-Aligned Sequence Distillation | [arXiv:2601.09088](https://arxiv.org/abs/2601.09088) |
 | **Ministral 3** (3B/8B/14B) | 2026 | Cascade Distillation (iterative prune + KD) | [arXiv:2601.08584](https://arxiv.org/abs/2601.08584) |
 | **MiMo-V2-Flash** (309B-A15B MoE) | 2026 | Multi-Teacher On-Policy Distillation (MOPD) | [arXiv:2601.02780](https://arxiv.org/abs/2601.02780) |
 | **OPSD-Distilled Reasoner** | 2026 | On-Policy Self-Distillation (single-model) | [arXiv:2601.18734](https://arxiv.org/abs/2601.18734) |
-| **Qwen3-\*-OPD** | 2025 | Strong-to-Weak (off-policy SFT → on-policy RKL) | [arXiv:2505.09388](https://arxiv.org/abs/2505.09388) |
+| **Kimi K2** (1T-A32B MoE) | 2025–26 | RLVR + rubric-distillation into policy | [arXiv:2507.20534](https://arxiv.org/abs/2507.20534) |
+| **Qwen3-\*-OPD** (0.6B–14B + 30B-A3B) | 2025 | Strong-to-Weak (off-policy SFT → on-policy RKL) | [arXiv:2505.09388](https://arxiv.org/abs/2505.09388) |
+| **Gemma 3** (1B/4B/12B/27B) | 2025 | KD in pre-training + GKD-style IT post-training | [arXiv:2503.19786](https://arxiv.org/abs/2503.19786) |
+| **Gemma 2** (2B/9B/27B) | 2024 | Token-level KD from a Gemini teacher | [Gemma 2 TR](https://storage.googleapis.com/deepmind-media/gemma/gemma-2-report.pdf) |
+| **TAID-LLM-1.5B / VLM-2B** | 2025 | Temporally Adaptive Interpolated Distillation | [arXiv:2501.16937](https://arxiv.org/abs/2501.16937) |
 | **DeepSeek-R1-Distill-\*** | 2025 | Off-policy SFT distillation (baseline) | [arXiv:2501.12948](https://arxiv.org/abs/2501.12948) |
+| **Phi-4** (14B) | 2024 | Synthetic-data post-distillation ("beyond KD") | [arXiv:2412.08905](https://arxiv.org/abs/2412.08905) |
 | **Llama-3.1-Minitron** (4B/8B) | 2024 | Pruning + KD | NVIDIA TR |
 | **MiniLLM-OPT/Llama** | 2023 | Reverse-KL on-policy KD | [arXiv:2306.08543](https://arxiv.org/abs/2306.08543) |
+| **Zephyr-7B (SPIN)** | 2024 | Self-play fine-tuning (implicit self-distillation) | [arXiv:2401.01335](https://arxiv.org/abs/2401.01335) |
 
 ---
 
@@ -514,6 +676,19 @@ blog directly, and place each work in the most specific subsection.
   <https://github.com/NVIDIA/NeMo-Aligner>
 - **EasyDistill** (Alibaba) — end-to-end distillation framework covering
   both off- and on-policy modes.
+- **ms-swift** (ModelScope / Alibaba) — has a first-class `swift distill`
+  entry point with GKD / reverse-KL / forward-KL / JSD loss options.
+  <https://github.com/modelscope/ms-swift>
+- **LLaMA-Factory** — popular SFT / DPO framework; `--stage kd` mode ships
+  an on-policy GKD-style trainer.
+  <https://github.com/hiyouga/LLaMA-Factory>
+- **SakanaAI/TAID** — reference implementation of Temporally Adaptive
+  Interpolated Distillation. <https://github.com/SakanaAI/TAID>
+- **UCLA-AGI SPIN** — official self-play fine-tuning code.
+  <https://github.com/uclaml/SPIN>
+- **slime** (Z.ai / Tsinghua) — the asynchronous RL framework behind GLM-5,
+  used to implement OPCSD at trillion-parameter scale.
+  <https://github.com/THUDM/slime>
 
 ---
 
@@ -567,10 +742,14 @@ blog directly, and place each work in the most specific subsection.
 Recent empirical and theoretical work has flagged several *non-trivial*
 limitations of OPD that are worth tracking:
 
-1. **Thinking-pattern incompatibility.** *Rethinking OPD*
-   ([arXiv:2604.13016](https://arxiv.org/abs/2604.13016)) shows that
-   teacher–student pattern mismatch can cause silent training failures even
-   when the teacher is objectively stronger.
+1. **Thinking-pattern incompatibility & "fake" stronger teachers.**
+   *Rethinking OPD* ([arXiv:2604.13016](https://arxiv.org/abs/2604.13016),
+   [code](https://github.com/thunlp/OPD)) shows that teacher–student pattern
+   mismatch can cause silent training failures even when the teacher is
+   objectively stronger; **same-family** teachers (e.g., 7B → 1.5B of the
+   same series) are often distributionally indistinguishable from the
+   student, providing essentially no signal — a finding it calls
+   "weak-to-strong reverse distillation."
 2. **Exploration collapse in self-distillation.** The Microsoft / KAIST / SNU
    study reports up to **40 % OOD accuracy drops** when self-distillation is
    applied aggressively; epistemic-verbalization diversity in training data
@@ -588,7 +767,10 @@ limitations of OPD that are worth tracking:
 5. **Scaling to long-horizon agent trajectories.** The 2604.00626 survey
    lists agent-level OPD as the most important open problem — dense
    token-level feedback becomes less meaningful when the useful reward is
-   many turns away.
+   many turns away. *Rethinking OPD*
+   ([arXiv:2604.13016](https://arxiv.org/abs/2604.13016)) reaches the same
+   conclusion empirically: dense token-level reward is "not free" and its
+   benefit shrinks as the horizon grows.
 6. **Distillation scaling laws.** There is currently no analog of Chinchilla
    for OPD: how does optimal compute split between teacher rollouts, student
    rollouts, and KL regularization as you scale student / teacher / data?
