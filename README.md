@@ -1,4 +1,4 @@
-# Awesome On-Policy Distillation [Awesome](https://awesome.re)
+# Awesome On-Policy Distillation [![Awesome](https://awesome.re/badge.svg)](https://awesome.re)
 
 <p align="center">
   <img src="assets/banner.png" alt="Awesome On-Policy Distillation" width="100%">
