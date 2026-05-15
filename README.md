@@ -24,10 +24,11 @@ A typical OPD step is:
 ```
 
 The framework unifies many recent ideas — GKD, MiniLLM, SDFT, SDPO, DASD,
-MOPD, OPSD, OPCD, TAID, SPIN, Cascade Distillation, SKD / SpecKD,
-**On-Policy Cross-Stage Distillation (OPCSD)** — and has been adopted
-in the post-training recipes of **GLM-5**, **Qwen3**, **MiMo-V2-Flash**,
-**Ministral 3**, **DASD-4B-Thinking**, **Gemma 3**, and many others.
+MOPD, OPSD, OPCD, OPSDC, TAID, SPIN, Veto, EOPD, REOPOLD, Video-OPD,
+GOLD, Cascade Distillation, SKD / SpecKD, **On-Policy Cross-Stage
+Distillation (OPCSD)** — and has been adopted in the post-training recipes
+of **GLM-5**, **Qwen3**, **MiMo-V2-Flash**, **Ministral 3**,
+**DASD-4B-Thinking**, **Gemma 3**, and many others.
 
 ---
 
@@ -47,6 +48,7 @@ blog directly, and place each work in the most specific subsection.
 - [Methods](#methods)
   - [Self-Distillation as On-Policy Learning](#self-distillation-as-on-policy-learning)
   - [On-Policy KD from a Larger Teacher](#on-policy-kd-from-a-larger-teacher)
+  - [Stability & Loss Engineering](#stability--loss-engineering)
   - [Speculative / Hybrid Student-Teacher Sampling](#speculative--hybrid-student-teacher-sampling)
   - [Sequence-Level & Distribution-Aligned Distillation](#sequence-level--distribution-aligned-distillation)
   - [Context Distillation on Student Rollouts](#context-distillation-on-student-rollouts)
@@ -55,14 +57,20 @@ blog directly, and place each work in the most specific subsection.
   - [Cross-Stage / Anti-Forgetting Distillation](#cross-stage--anti-forgetting-distillation)
   - [Interpolated / Curriculum Distillation](#interpolated--curriculum-distillation)
   - [Self-Play as Implicit On-Policy Distillation](#self-play-as-implicit-on-policy-distillation)
+  - [Cross-Tokenizer / Cross-Family Distillation](#cross-tokenizer--cross-family-distillation)
+  - [Multimodal & Embodied On-Policy Distillation](#multimodal--embodied-on-policy-distillation)
   - [Cascade / Pruning + Distillation](#cascade--pruning--distillation)
   - [RL × Distillation Connections (Inverse RL, Imitation)](#rl--distillation-connections-inverse-rl-imitation)
 - [Applications](#applications)
   - [Long-CoT Reasoning](#long-cot-reasoning)
+  - [Reasoning Compression / Token Efficiency](#reasoning-compression--token-efficiency)
   - [Agentic & Tool Use](#agentic--tool-use)
   - [Continual Learning & Catastrophic Forgetting](#continual-learning--catastrophic-forgetting)
   - [Model Compression / Small Language Models](#model-compression--small-language-models)
+  - [Multimodal & Video](#multimodal--video)
+  - [Robotics & Embodied AI](#robotics--embodied-ai)
   - [Code & Math](#code--math)
+- [Best Practices & Recipes](#best-practices--recipes)
 - [Models & Technical Reports](#models--technical-reports)
 - [Codes & Frameworks](#codes--frameworks)
 - [Tutorials & Blogs](#tutorials--blogs)
@@ -90,6 +98,34 @@ blog directly, and place each work in the most specific subsection.
   methods, their relationship to RLVR, credit assignment, dense vs. sparse
   reward signals, and a taxonomy of representative works
   (SDFT / SDPO / DASD / MOPD / GKD / MiniLLM …).*
+
+- **长文总结：近半年 On-Policy Distillation 的三大主流方向** (知乎, May 2026)
+  [[Article]](https://zhuanlan.zhihu.com/p/2020191969205306820)
+  *9-paper deep-dive that organizes the recent OPD wave into three lines:
+  **(1) Stability & diversity** — Veto, EOPD, REOPOLD;
+  **(2) Self-distillation with privileged context** — OPSD, SDFT, SDPO,
+  OPSDC; **(3) Scenario expansion** — OPCD and Video-OPD. Includes
+  side-by-side comparison tables and the most up-to-date taxonomy of OPD
+  failure modes.*
+
+- **近一月 On-Policy-Distillation 进展总结：密集奖励的隐患与对策**
+  (知乎, May 2026) [[Article]](https://zhuanlan.zhihu.com/p/2028518805890974874)
+  *5-paper "failure-modes month" review covering Rethinking OPD,
+  StableOPD, Revisiting OPD, SCOPE and VLA-OPD. Argues that as Qwen3 /
+  GLM-5 / MiMo-V2 push OPD into industrial production, **dense token-level
+  reward turns out to be a deceptively unsafe free lunch** — repetition
+  collapse, reverse-distillation paradoxes, single-token sampling
+  artifacts, Pass@k destruction, and toxic prefix traps all surface
+  simultaneously. The companion piece to the May survey above; together
+  they are the best entry point to the **OPD-failure-mode literature**.*
+
+- **On-Policy Distillation 是什么？如何做？** (知乎 / kxzxvbk, BUAA, Feb 2026)
+  [[Article]](https://zhuanlan.zhihu.com/p/2000612721868177979) ·
+  [[Mirror]](https://qingkeai.online/archives/How%20do%20On-Policy%20Distillation)
+  *Tutorial-style introduction that derives both the **simple sampling
+  estimator** of reverse-KL and the **vocabulary-summed gradient
+  estimator** used in MiniLLM / GKD. Then walks through the self-distillation
+  recipe (`π_teacher(y|x) = π_θ(y|x, c)`) that underpins OPSD / SDFT.*
 
 - **Kevin Lu & Thinking Machines Lab. On-Policy Distillation.**
   Thinking Machines Lab: Connectionism, Oct 27, 2025.
@@ -245,6 +281,20 @@ blog directly, and place each work in the most specific subsection.
   **6–15× higher KL** than math-content tokens and dominate the training
   signal; clipping eliminates the instability.*
 
+- **OPSDC — On-Policy Self-Distillation for Reasoning Compression** (2026)
+  [[arXiv:2603.05433]](https://arxiv.org/abs/2603.05433) ·
+  [[Code]](https://github.com/HJSang/OPSD_Reasoning_Compression)
+  *Inverts the usual OPD direction: the privileged context is a **"be
+  concise" instruction `c`** and the goal is to **shorten** the student's
+  reasoning rather than improve its content. Uses reverse-KL on student
+  rollouts with periodic teacher-weight refresh (every M=50 steps).
+  Striking finding — **less reasoning, more accuracy**: on Qwen3-14B, MATH-500
+  jumps from 70.0 % → 86.1 % accuracy while using **56.5 % fewer tokens**;
+  AIME'24 +10 pp at 41 % compression. Theoretically the accuracy gain scales
+  as \((1-p_{\text{err}})^{-(1-\alpha)L}\). Crucially shows **forward KL
+  collapses on every teacher refresh** while reverse KL is stable — a clean
+  empirical case study for the loss-engineering work below.*
+
 - Tianduo Wang, Wei Lu et al. **Self-Distillation Bridges Distribution Gap in
   Language Model Fine-Tuning.** ACL, 2024.
   [[arXiv:2402.13669]](https://arxiv.org/abs/2402.13669)
@@ -303,6 +353,115 @@ blog directly, and place each work in the most specific subsection.
 
 - **TAID — Temporally Adaptive Interpolated Distillation** (Sakana AI,
   ICLR 2025) — see [Interpolated / Curriculum Distillation](#interpolated--curriculum-distillation).
+
+### Stability & Loss Engineering
+
+> A separate axis of OPD research focuses **not on what the teacher is** but
+> on **how the teacher's signal is shaped into a usable gradient**. Three
+> canonical failure modes are addressed: (i) gradient explosion under
+> forward KL on "ignorant" tokens, (ii) mode collapse under reverse KL,
+> and (iii) heavy-tailed reward distributions that mimic RL pathologies.
+
+- **Veto — Stable On-Policy Distillation through Adaptive Target
+  Reformulation** (2026)
+  [[arXiv:2601.07155]](https://arxiv.org/abs/2601.07155) ·
+  [[HF Paper]](https://huggingface.co/papers/2601.07155)
+  *Pinpoints OPD instability as a **geometry-of-divergence** problem rather
+  than a data problem. Builds a *logit-space geometric bridge*
+  \(P_{\text{target}} = (1-\alpha) P_T + \alpha P_S\) that simultaneously
+  serves as: (a) an **adaptive gradient veto** that suppresses runaway
+  forward-KL gradients on tokens where \(P_T \gg P_S\) (where naïve gradients
+  reach \(10^7\) magnitudes); and (b) a **decisiveness knob** trading off
+  reward-driven precision against output diversity in the reverse-KL
+  regime. A single scalar \(\alpha\) defangs both classical OPD failure modes.*
+
+- **EOPD — Entropy-Aware On-Policy Distillation of Language Models** (2026)
+  [[arXiv:2603.07079]](https://arxiv.org/abs/2603.07079) ·
+  [[OpenReview]](https://openreview.net/forum?id=WSRQ37tzk1)
+  *Finds that pure reverse-KL **kills high-entropy tokens** — exactly the
+  reasoning forks where diversity matters most. Empirically, a Qwen3-1.7B
+  student trained with reverse-KL retains only **6.8 %** high-entropy tokens
+  on AIME'24/25 vs. **18.5 %** for its Qwen3-8B teacher. Solution: switch
+  losses **per-token** based on teacher entropy — reverse-KL on low-entropy
+  tokens (fast & stable), **plus forward-KL on high-entropy tokens** (mode
+  covering). Pass@8 gains +1.37 / +2.39 / +5.05 on Qwen3-{0.6B, 1.7B, 4B}
+  across 6 math benchmarks; the gain **grows with model size**, suggesting
+  diversity preservation matters more at scale.*
+
+- **REOPOLD — Scaling Reasoning Efficiently via Relaxed On-Policy
+  Distillation** (2026)
+  [[arXiv:2603.11137]](https://arxiv.org/abs/2603.11137)
+  *Formal contribution: proves that **stop-gradient OPD ≡ on-policy policy
+  gradient** with a token-level reward
+  \(r_{i,t}(\theta) = \log P_T(y_{i,t}\mid\cdot) / \log P_S(y_{i,t}\mid\cdot)\).
+  This unlocks the entire RL toolbox for OPD: (1) **mixture reward
+  clipping** (clipping the reward, not the importance ratio, to tame
+  heavy-tailed negative rewards); (2) **entropy-guided token-level dynamic
+  sampling** (gradients only on the top-\((1-\rho)\) most uncertain tokens);
+  (3) **explore-then-refine schedule** that masks strong negatives early
+  and switches to entropy masking later. Result: **6.7–12× sample efficiency
+  on AIME-25** vs. ProRL / Still-3-1.5B, and a 3B vision student matches
+  a 32B teacher with **3.3× inference speedup** on Geometry3K.*
+
+- **StableOPD — Demystifying OPD: Length Inflation and Stabilization
+  Strategies** (Rice University, Apr 2026)
+  [[arXiv:2604.08527]](https://arxiv.org/abs/2604.08527)
+  *Identifies **repetition collapse** as a built-in OPD reward-hacking
+  failure mode: ~30 training steps after a phase transition, truncation
+  rate spikes to 1.0, repetition rate to 0.3–0.6, and validation accuracy
+  craters. Mechanism: when the student loops, the (stronger) teacher
+  becomes **more confident** on the repeating context than the student,
+  so \(\log P_T - \log P_S\) becomes a strongly positive reward —
+  **repetition-token advantage is 4–9× normal-token advantage**, creating
+  a self-reinforcing repetition cycle. Detected via zlib compression
+  ratio > 10×. Solution: (a) **Reference-based KL regularization** to a
+  pre-training student snapshot to slow policy drift; (b) **Rollout
+  Mixture Distillation** that injects high-quality SFT examples
+  (OpenR1-Math-220k, length & correctness filtered) every step. Numbers:
+  Qwen2.5-1.5B 28.9 % → **35.7 %**, Qwen2.5-7B 43.8 % → **47.6 %**.*
+
+- **Revisiting OPD — Empirical Failure Modes and Simple Fixes**
+  (CASIA, Mar 2026)
+  [[arXiv:2603.25562]](https://arxiv.org/abs/2603.25562) ·
+  [[HF Paper]](https://huggingface.co/papers/2603.25562)
+  *A patch for the **single-token-sampled OPD** that Qwen3 / MiMo-V2
+  ship in production. Theoretical: token-level reverse-KL has variance
+  bound \(O(T^2)\) vs sequence-level \(O(T^4)\) — token-level is a
+  deliberate variance reduction, not a wrong approximation. Empirically
+  diagnoses three structural bugs: (1) **signal imbalance** — most
+  student samples have negative log-ratio, so the positive learning
+  signal collapses onto a few tokens; (2) **out-of-support teacher
+  unreliability** — when the student drifts, the teacher emits
+  "plausible-looking but harmful" high-probability predictions
+  (repetition, self-resets, format errors); (3) **tokenizer mismatch
+  artifacts** — `<think>` split as `<,think,>` vs `<th,ink,>` makes
+  single-token comparison meaningless. Fix: **Local Support Set
+  Matching** — at each prefix, take teacher top-K, optionally filtered
+  by top-p, **renormalize teacher and student onto this support**, then
+  compute reverse-KL. +19.8 % over standard sampled-token OPD; near-zero
+  compute overhead — **the cleanest drop-in upgrade for production OPD
+  trainers right now**.*
+
+- **SCOPE — Signal-Calibrated OPD Enhancement with Dual-Path Adaptive
+  Weighting** (Meituan + USTC + NJU + Fudan + HUST, Apr 2026)
+  [[arXiv:2604.10688]](https://arxiv.org/abs/2604.10688) ·
+  [[Code]](https://github.com/machine981/SCOPE)
+  *First OPD work to argue that **correct and incorrect rollouts deserve
+  different objectives**. Two motivating findings: (i) **Pass@k paradox**
+  — uniform rollout reinforcement on Qwen2.5-7B improves Pass@1 but
+  drops Pass@32 from 93.7 % to 84.9 % by killing minority-correct paths;
+  (ii) **toxic-prefix trap** — teacher recovery from bad student
+  prefixes is reliable for low-PPL prefixes (64.9 %) but unreliable for
+  high-PPL ones (45.4 %), and recovery degrades sharply with truncation
+  depth. Solution: split rollouts by correctness, then weight per-group
+  with softmax (\(\tau=1.0\)):
+  **incorrect** → teacher-KL × **(1/teacher-PPL)** (down-weight
+  unreliable corrections);
+  **correct** → MLE × **student-PPL** (boost low-confidence "boundary"
+  successes). +5.54 % Avg@32 across 6 benchmarks (R1-Distill-Qwen-1.5B
+  ← Skywork-OR1-Math-7B), with +10.69 % on OlympiadBench. Reversing the
+  weighting direction crashes performance, confirming the signal-quality
+  hypothesis.*
 
 ### Speculative / Hybrid Student-Teacher Sampling
 
@@ -495,6 +654,72 @@ blog directly, and place each work in the most specific subsection.
   *Extends self-rewarding by additionally judging the judge, producing a
   two-level on-policy distillation loop.*
 
+### Cross-Tokenizer / Cross-Family Distillation
+
+> A practical bottleneck of OPD is that the teacher and student normally
+> have to share a tokenizer. These works lift that constraint and turn OPD
+> into a model-family-agnostic post-training tool.
+
+- **GOLD — General Online Logit Distillation** (Hugging Face H4, 2025)
+  Lewis Tunstall, Ed Beeching, Quentin Gallouédec, Patiño et al.
+  **Unlocking On-Policy Distillation for Any Model Family.**
+  [[Blog]](https://huggingfaceh4-on-policy-distillation.hf.space/) ·
+  [[Space]](https://huggingface.co/spaces/HuggingFaceH4/on-policy-distillation) ·
+  [[Trainer Doc]](https://huggingface.co/docs/trl/v0.25.0/gold_trainer)
+  *Extends Universal Logit Distillation (ULD) to the **on-policy** setting.
+  Incrementally decodes both the student's and the teacher's tokens, groups
+  passages with matching visible text, and **merges associated logits** so
+  that no completion token is dropped even when token boundaries differ.
+  Hybrid loss: exact match → standard logit distillation; otherwise → ULD
+  fallback on sorted probabilities. Beats both ULD and GRPO on multi-step
+  math, and is shipped as `GOLDTrainer` in TRL — making OPD work between
+  any LLaMA / Qwen / Mistral / Gemma combination.*
+
+### Multimodal & Embodied On-Policy Distillation
+
+> OPD has expanded beyond text into vision-language, video, and robot
+> control. The on-policy property is even more valuable here because
+> rolling out a long visual / sensorimotor context is the dominant cost,
+> and per-step dense supervision is much more informative than a single
+> task-success bit.
+
+- **Video-OPD — Efficient Post-Training of MLLMs for Temporal Video
+  Grounding via On-Policy Distillation** (2026)
+  [[arXiv:2602.02994]](https://arxiv.org/abs/2602.02994)
+  *Brings OPD to **Temporal Video Grounding (TVG)**, where GRPO suffers
+  from sparse sequence-level rewards and very expensive multi-rollout
+  visual processing. Video-OPD has the student (Qwen3-VL-8B) roll out once,
+  then a frontier teacher (Qwen3-VL-32B-GRPO) **scores** every action
+  token: \(r_t = -\log \theta(a_t \mid s_t) + \log \theta_{\text{tea}}(a_t \mid s_t)\).
+  Adds **TVDF curriculum** = TRPV (Teacher-Reliability Pre-Validation,
+  filter unreliable teacher predictions by ground-truth IoU) + DBTP
+  (Disagreement-Based Trajectory Prioritization, train hardest on
+  highest-disagreement trajectories). Average **+17 %** over GRPO across
+  Charades / ActivityNet / QVHighlights TimeLens (R@0.7), surpasses
+  GPT-4o / GPT-5 / Gemini-2.0-Flash and approaches Gemini-2.5-Flash.*
+
+- **VLA-OPD — Bridging Offline SFT and Online RL for Vision-Language-
+  Action Models via On-Policy Distillation** (HKUST, Mar 2026)
+  [[arXiv:2603.26666]](https://arxiv.org/abs/2603.26666)
+  *First port of OPD to **robotic manipulation**. Replaces the sparse
+  0/1 environment reward of online RL with the teacher's per-action
+  log-probability on student-visited states; reward is
+  \(-\log(\pi_\theta / \pi_{\text{tea}})\). The paper's central
+  contribution is a **clean three-way KL ablation in OOD states**:
+  *Forward-KL* makes the student copy the teacher's hesitation → entropy
+  explodes, success rate drops 50 %+ early on; *Hard-CE* destroys soft
+  probability information → entropy collapse; *Reverse-KL* is bounded
+  mode-seeking that filters teacher uncertainty while preserving
+  exploration. Results on **LIBERO**: 1-demo SFT 48.9 % → **87.4 %**
+  (close to the 50-demo teacher's 93.9 %); 10 steps to 90 % vs GRPO's
+  150 steps. **RoboTwin2.0 dual-arm** 45.2 % → 71.1 %. Robotics turns
+  out to be a clean OPD domain — short trajectories + reliable teacher
+  signal end-to-end.*
+
+- **TAID-VLM-2B** (Sakana AI, ICLR 2025) — vision-language sister of
+  TAID-LLM-1.5B; also fits here.
+  [[arXiv:2501.16937]](https://arxiv.org/abs/2501.16937)
+
 ### Cascade / Pruning + Distillation
 
 - **Cascade Distillation** (Mistral AI, 2026)
@@ -550,10 +775,32 @@ blog directly, and place each work in the most specific subsection.
 - **MiMo-V2-Flash** — long-CoT reasoning + agentic capability via MOPD.
   [[arXiv:2601.02780]](https://arxiv.org/abs/2601.02780)
 
+### Reasoning Compression / Token Efficiency
+
+> A surprisingly under-discussed application: OPD as a **reasoning-length
+> compressor**. Modern reasoning models often spend thousands of tokens
+> on simple problems and these tokens are not just wasteful — they are
+> potential error sources.
+
+- **OPSDC** ([arXiv:2603.05433](https://arxiv.org/abs/2603.05433)) —
+  conditioning the same model on a "be concise" instruction yields a
+  teacher whose distillation **compresses 40–58 % of tokens while
+  improving accuracy by 10–16 pp** on MATH-500 / AIME. Difficulty-adaptive
+  by construction (compresses easy problems aggressively, hard problems
+  gently).
+- **REOPOLD** — entropy-guided masking implicitly compresses reasoning by
+  zeroing gradients on low-information tokens.
+  [[arXiv:2603.11137]](https://arxiv.org/abs/2603.11137)
+- **OPSD** — 1,024-token rollouts vs. GRPO's 16,384, matching accuracy
+  with **8–12× token efficiency**.
+  [[arXiv:2601.18734]](https://arxiv.org/abs/2601.18734)
+
 ### Agentic & Tool Use
 
 - **SDPO** — first OPD method to show explicit gains on tool use and
-  competitive programming via rich textual feedback.
+  competitive programming via rich textual feedback. SDPO matches GRPO's
+  final accuracy with **4× fewer rollouts**, and on chemistry tasks
+  Olmo3-7B reaches in 30 min what GRPO needs 5 h for (~10× speedup).
   [[arXiv:2601.20802]](https://arxiv.org/abs/2601.20802)
 - **MiMo-V2-Flash** — agentic capability via teacher specialization in MOPD.
 - **Tinker Cookbook Multi-Turn (Harbor)** — multi-turn agent OPD recipe.
@@ -599,10 +846,40 @@ blog directly, and place each work in the most specific subsection.
 - **MobileLLM**, **OLMoE-1B-7B** — small-model technical reports with KD
   ablations relevant to OPD.
 
+### Multimodal & Video
+
+- **Video-OPD** — first OPD method on **video temporal grounding**;
+  +17 % R@0.7 over GRPO across Charades / ActivityNet / QVHighlights.
+  [[arXiv:2602.02994]](https://arxiv.org/abs/2602.02994)
+- **REOPOLD-3B** — vision-language student matches a 32B teacher with
+  3.3× speedup (Geometry3K) and 2.2× speedup (MathVerse).
+  [[arXiv:2603.11137]](https://arxiv.org/abs/2603.11137)
+- **TAID-VLM-2B** — best-in-class VLM ≤4B via interpolated distillation.
+  [[arXiv:2501.16937]](https://arxiv.org/abs/2501.16937)
+
+### Robotics & Embodied AI
+
+- **VLA-OPD** — first OPD method on **robot manipulation**. Replaces
+  the sparse 0/1 environment reward with the teacher's per-action
+  log-prob on student-visited states; LIBERO 1-demo SFT 48.9 % →
+  87.4 %, RoboTwin2.0 dual-arm 45.2 % → 71.1 %, with 15× faster
+  convergence than GRPO. Empirically establishes
+  **Reverse-KL > Forward-KL > Hard-CE** for OOD action distributions.
+  [[arXiv:2603.26666]](https://arxiv.org/abs/2603.26666)
+- *Open question*: trillion-parameter VLA + multi-step planning + OPD —
+  no work yet, but a natural next step combining MOPD-style
+  multi-teacher with VLA-OPD's reverse-KL recipe.
+
 ### Code & Math
 
 - **SDPO** on LiveCodeBench v6.
 - **OPSD** on AIME / MATH / GSM8K / Olympiad-Bench.
+- **OPSDC** — Qwen3-14B reaches **86.1 %** on MATH-500 (up from 70.0 %)
+  with 56.5 % fewer tokens. [[arXiv:2603.05433]](https://arxiv.org/abs/2603.05433)
+- **EOPD** on Qwen3-4B — Pass@8 +5.05 over baseline OPD across 6 math
+  benchmarks. [[arXiv:2603.07079]](https://arxiv.org/abs/2603.07079)
+- **REOPOLD** — Pass@1 32–34 % on AIME-25, 6.7–12× more sample-efficient
+  than ProRL. [[arXiv:2603.11137]](https://arxiv.org/abs/2603.11137)
 - **DASD-4B-Thinking** on AIME / GPQA / LiveCodeBench.
 - **MiMo-V2-Flash** on full math + code suite.
 - **Qwen3-8B + OPD** achieves AIME'24 74.4 %, MATH500 97.0 %,
@@ -629,6 +906,14 @@ blog directly, and place each work in the most specific subsection.
 | **Llama-3.1-Minitron** (4B/8B) | 2024 | Pruning + KD | NVIDIA TR |
 | **MiniLLM-OPT/Llama** | 2023 | Reverse-KL on-policy KD | [arXiv:2306.08543](https://arxiv.org/abs/2306.08543) |
 | **Zephyr-7B (SPIN)** | 2024 | Self-play fine-tuning (implicit self-distillation) | [arXiv:2401.01335](https://arxiv.org/abs/2401.01335) |
+| **Video-OPD-8B** (Qwen3-VL-8B) | 2026 | On-policy distillation for video temporal grounding (TVDF curriculum) | [arXiv:2602.02994](https://arxiv.org/abs/2602.02994) |
+| **OPSDC-Qwen3-14B-Compact** | 2026 | "Be concise" self-distillation; –56.5 % tokens, +16 pp MATH-500 | [arXiv:2603.05433](https://arxiv.org/abs/2603.05433) |
+| **REOPOLD-3B / 7B** | 2026 | Reward-clipped, entropy-masked OPD (RL-style) | [arXiv:2603.11137](https://arxiv.org/abs/2603.11137) |
+| **EOPD-Qwen3-4B** | 2026 | Entropy-aware reverse-KL + forward-KL switch | [arXiv:2603.07079](https://arxiv.org/abs/2603.07079) |
+| **StableOPD-Qwen2.5-1.5B / 7B** | 2026 | Reference-KL + rollout-mixture distillation; cures repetition collapse | [arXiv:2604.08527](https://arxiv.org/abs/2604.08527) |
+| **Revisiting-OPD-Qwen** | 2026 | Top-K + top-p local-support reverse-KL (cures tokenizer-mismatch & signal-imbalance) | [arXiv:2603.25562](https://arxiv.org/abs/2603.25562) |
+| **SCOPE-R1-Distill-Qwen-1.5B** | 2026 | Dual-path PPL-weighted (correct vs incorrect) OPD | [arXiv:2604.10688](https://arxiv.org/abs/2604.10688) |
+| **VLA-OPD-LIBERO / RoboTwin** | 2026 | Reverse-KL OPD for VLA robot models (1-demo recipe) | [arXiv:2603.26666](https://arxiv.org/abs/2603.26666) |
 
 ---
 
@@ -651,6 +936,13 @@ blog directly, and place each work in the most specific subsection.
 - **OPSD official code** — On-Policy Self-Distillation training scripts.
   <https://github.com/siyan-zhao/OPSD>
 
+- **OPSDC official code** — On-Policy Self-Distillation for Reasoning
+  Compression (the "be concise" recipe).
+  <https://github.com/HJSang/OPSD_Reasoning_Compression>
+
+- **SCOPE official code** — Signal-Calibrated OPD with dual-path
+  PPL-weighted training. <https://github.com/machine981/SCOPE>
+
 - **MiniLLM (Microsoft LMOps)** — official PyTorch implementation of
   reverse-KL on-policy distillation for LLMs.
   <https://github.com/microsoft/LMOps/tree/main/minillm>
@@ -663,7 +955,9 @@ blog directly, and place each work in the most specific subsection.
 
 ### General Frameworks That Support OPD
 
-- **TRL** (Hugging Face) — `GKDTrainer` implements the Agarwal et al. recipe.
+- **TRL** (Hugging Face) — `GKDTrainer` implements the Agarwal et al.
+  recipe; experimental `GOLDTrainer` adds **cross-tokenizer** OPD; legacy
+  `GOLDTrainer` (older spelling) underpins OPSD.
   <https://github.com/huggingface/trl>
 - **OpenRLHF** — RLHF-style framework with hooks suitable for OPD
   experiments.
@@ -706,6 +1000,13 @@ blog directly, and place each work in the most specific subsection.
   Medium article.
 - **The hidden trap of LLMs self-distillation** — Ben Dickson, TechTalks,
   Apr 2026. [[Blog]](https://bdtechtalks.substack.com/p/the-hidden-trap-of-llms-self-distillation)
+- **Unlocking On-Policy Distillation for Any Model Family** — Patiño,
+  Tunstall, Beeching, Gallouédec et al., Hugging Face H4, Oct 2025.
+  [[Blog]](https://huggingfaceh4-on-policy-distillation.hf.space/) ·
+  [[Space]](https://huggingface.co/spaces/HuggingFaceH4/on-policy-distillation)
+  *Introduces **GOLD** (General Online Logit Distillation) — the first
+  open recipe to make OPD work between **mismatched tokenizers**, e.g.
+  LLaMA student with a Qwen teacher.*
 
 ### Chinese (中文资料)
 
@@ -715,6 +1016,14 @@ blog directly, and place each work in the most specific subsection.
 - 《[阿里云提出 DASD：分布对齐的序列蒸馏，实现更优的长链思维推理](https://mp.weixin.qq.com/s/TOeY5rkKUFl_cYaOKQaMaA)》— DASD 论文解读.
 - 《[深度解析 Ministral 3：基于级联蒸馏的参数高效密集模型训练方法论](https://mp.weixin.qq.com/s/_gN-easX9VpsW1g9aixDuw)》— Ministral 3 论文解读.
 - 《[小米 MiMo-V2-Flash 技术报告：MoE 架构、混合注意力机制与多教师在线蒸馏](https://mp.weixin.qq.com/s/3a2xz8LYhyV6udSgxuQFoA)》— MiMo-V2-Flash 论文解读.
+- 《[长文总结：近半年 On-Policy Distillation 的三大主流方向](https://zhuanlan.zhihu.com/p/2020191969205306820)》— 9 篇核心 OPD 论文的深度纵览（稳定性 / 自蒸馏 / 场景扩展三大方向）.
+- 《[On-Policy Distillation 是什么？如何做？](https://zhuanlan.zhihu.com/p/2000612721868177979)》— kxzxvbk (BUAA), 教程式入门与公式推导.
+
+### Related Awesome Lists
+
+- **thinkwee/AwesomeOPD** — sister awesome list maintained by the THUNLP
+  community, accompanies the [arXiv:2604.13016](https://arxiv.org/abs/2604.13016)
+  paper. <https://github.com/thinkwee/AwesomeOPD>
 
 ---
 
@@ -774,6 +1083,97 @@ limitations of OPD that are worth tracking:
 6. **Distillation scaling laws.** There is currently no analog of Chinchilla
    for OPD: how does optimal compute split between teacher rollouts, student
    rollouts, and KL regularization as you scale student / teacher / data?
+7. **Repetition collapse as a built-in reward-hacking failure mode.**
+   *StableOPD* ([arXiv:2604.08527](https://arxiv.org/abs/2604.08527)) shows
+   a phase transition ~30 steps in: when the student starts looping, the
+   stronger teacher becomes *more* confident on the repeating context, so
+   the OPD reward \(\log P_T - \log P_S\) becomes positive and **the
+   advantage of repetition tokens spikes to 4–9× normal** — a
+   self-reinforcing loop that crashes accuracy. Reverse-KL has a
+   *systematic* preference for local repetition; on-policy sampling
+   amplifies it.
+8. **Dense reward quality decays with sequence depth.** *Rethinking OPD*
+   ([arXiv:2604.13016](https://arxiv.org/abs/2604.13016)) measures
+   teacher-vs-student continuation accuracy at increasing prefix lengths:
+   advantage shrinks from **+0.37 at 1K tokens to +0.02 at 16K tokens**.
+   The "dense reward" is densest at the start of a sequence and turns
+   into noise by the end — particularly damaging for long-CoT.
+9. **Single-token sampling has three structural bugs.** *Revisiting OPD*
+   ([arXiv:2603.25562](https://arxiv.org/abs/2603.25562)) catalogues the
+   defaults that Qwen3 / MiMo-V2 ship: signal imbalance (most samples
+   negative), out-of-support teacher unreliability, and tokenizer-split
+   mismatch (`<think>` → `<,think,>` vs `<th,ink,>`). Local-support-set
+   matching fixes all three at near-zero compute cost.
+10. **Pass@k paradox.** *SCOPE* ([arXiv:2604.10688](https://arxiv.org/abs/2604.10688))
+    shows that uniform reinforcement of correct rollouts kills minority-correct
+    paths: Qwen2.5-7B Pass@32 drops **93.7 % → 84.9 %** while Pass@1
+    improves. Plain OPD without correctness-aware weighting silently
+    sacrifices solution diversity.
+11. **Toxic-prefix trap.** *SCOPE* also shows that teacher recovery from
+    bad student prefixes is reliable for low-PPL prefixes (64.9 %) but
+    drops to 45.4 % for high-PPL prefixes. Naïvely teaching from "fix
+    this broken prefix" trajectories can inject more noise than signal.
+
+---
+
+## Best Practices & Recipes
+
+> A consolidated recipe shelf distilled from the failure-mode literature
+> above. None of these are mandatory, but skipping any of them invites
+> one of the failure modes in the previous section.
+
+1. **Pre-flight diagnosis (Rethinking OPD, [arXiv:2604.13016](https://arxiv.org/abs/2604.13016))**
+   - Measure **overlap ratio** = (student top-k ∩ teacher top-k) / k at
+     student-visited states. Successful OPD trends from ~72 % to ≥91 %;
+     a flat curve means the teacher offers no new signal — abort.
+   - Run **reverse-distillation sanity check**: if "stronger" teacher
+     pulls a strong RL'd student *down* to its un-RL'd sibling, the
+     teacher is the same distribution as your student — find a teacher
+     from a *different* training pipeline.
+2. **SFT cold start + prompt-template alignment** (Rethinking OPD)
+   *Generate ~200K demonstrations from the teacher and run a brief SFT
+   pass before OPD; use the teacher's training prompt format verbatim
+   for the student rollouts.* Single biggest stability win in the paper.
+3. **KL anchor + golden mixture** (StableOPD,
+   [arXiv:2604.08527](https://arxiv.org/abs/2604.08527))
+   - Add a reference-model KL term against the **initial student
+     checkpoint** to bound policy drift speed.
+   - Mix in **filtered SFT** examples (e.g., OpenR1-Math-220k filtered
+     by length & correctness) every step. Detect repetition via zlib
+     compression ratio > 10× and trigger early stopping if it appears.
+4. **Local-support reverse-KL** (Revisiting OPD,
+   [arXiv:2603.25562](https://arxiv.org/abs/2603.25562))
+   At each prefix, compute reverse-KL **only on teacher's top-K (with
+   optional top-p filter), with both distributions renormalized onto
+   that support**. Fixes signal imbalance, OOS unreliability, and
+   tokenizer artifacts in one stroke. Drop-in upgrade for any GKD-style
+   trainer.
+5. **Dual-path PPL weighting** (SCOPE,
+   [arXiv:2604.10688](https://arxiv.org/abs/2604.10688))
+   Split rollouts by correctness:
+   - **Wrong** → teacher-KL weighted by **1/teacher-PPL** (group-softmax,
+     τ = 1.0).
+   - **Right** → MLE weighted by **student-PPL** (boost
+     low-confidence successes).
+6. **Choose Reverse-KL for OOD-heavy problems** (VLA-OPD,
+   [arXiv:2603.26666](https://arxiv.org/abs/2603.26666))
+   - Forward-KL → entropy explosion when teacher hesitates.
+   - Hard-CE → entropy collapse when teacher is on the decision boundary.
+   - Reverse-KL → bounded mode-seeking that filters teacher noise while
+     preserving student exploration. Use Reverse-KL by default in
+     robotics / OOD-heavy settings.
+7. **Token-level entropy guard** (EOPD,
+   [arXiv:2603.07079]; OPSD v3,
+   [arXiv:2601.18734v3](https://arxiv.org/abs/2601.18734v3))
+   - Switch to **forward-KL** on high-teacher-entropy tokens to preserve
+     reasoning diversity.
+   - Apply a **per-token JSD clip** (~0.05) to prevent style tokens
+     (`wait`, `think`) from monopolizing the gradient.
+8. **Reward / log-ratio clipping** (REOPOLD,
+   [arXiv:2603.11137](https://arxiv.org/abs/2603.11137))
+   Clip **the reward**, not the importance ratio:
+   \(\tilde{R} = \max(\text{sg}(R),\ \log\frac{\alpha}{1-\alpha})\).
+   Prevents heavy-tailed negative rewards from dominating.
 
 ---
 
