@@ -25,10 +25,11 @@ A typical OPD step is:
 
 The framework unifies many recent ideas — GKD, MiniLLM, SDFT, SDPO, DASD,
 MOPD, OPSD, OPCD, OPSDC, TAID, SPIN, Veto, EOPD, REOPOLD, Video-OPD,
-VLA-OPD, **Lightning OPD**, GOLD, Cascade Distillation, SKD / SpecKD,
-**On-Policy Cross-Stage Distillation (OPCSD)** — and has been adopted in
-the post-training recipes of **GLM-5**, **Qwen3**, **MiMo-V2-Flash**,
-**Ministral 3**, **DASD-4B-Thinking**, **Gemma 3**, and many others.
+VLA-OPD, **Lightning OPD**, **DP-OPD**, GOLD, Cascade Distillation,
+SKD / SpecKD, **On-Policy Cross-Stage Distillation (OPCSD)** — and has
+been adopted in the post-training recipes of **GLM-5**, **Qwen3**,
+**MiMo-V2-Flash**, **Ministral 3**, **DASD-4B-Thinking**, **Gemma 3**,
+and many others.
 
 ---
 
@@ -60,6 +61,7 @@ blog directly, and place each work in the most specific subsection.
   - [Cross-Tokenizer / Cross-Family Distillation](#cross-tokenizer--cross-family-distillation)
   - [Multimodal & Embodied On-Policy Distillation](#multimodal--embodied-on-policy-distillation)
   - [Offline / Resource-Efficient OPD](#offline--resource-efficient-opd)
+  - [Privacy-Preserving / DP On-Policy Distillation](#privacy-preserving--dp-on-policy-distillation)
   - [Cascade / Pruning + Distillation](#cascade--pruning--distillation)
   - [RL × Distillation Connections (Inverse RL, Imitation)](#rl--distillation-connections-inverse-rl-imitation)
 - [Applications](#applications)
@@ -70,6 +72,7 @@ blog directly, and place each work in the most specific subsection.
   - [Model Compression / Small Language Models](#model-compression--small-language-models)
   - [Multimodal & Video](#multimodal--video)
   - [Robotics & Embodied AI](#robotics--embodied-ai)
+  - [Privacy-Preserving Compression](#privacy-preserving-compression)
   - [Code & Math](#code--math)
 - [Best Practices & Recipes](#best-practices--recipes)
 - [Models & Technical Reports](#models--technical-reports)
@@ -764,6 +767,49 @@ blog directly, and place each work in the most specific subsection.
   cross-stage (OPCSD) setups — Teacher Consistency would have to be
   redefined per-stage / per-domain.
 
+### Privacy-Preserving / DP On-Policy Distillation
+
+> When the training corpus is sensitive (medical / legal / financial /
+> proprietary), the released model must satisfy a formal privacy
+> guarantee. Naïvely combining DP-SGD with KD either (a) blows up the
+> privacy–utility tradeoff (DP on both teacher and student) or (b)
+> requires an offline DP-synthetic-text pipeline (DistilDP). On-policy
+> distillation offers a third path.
+
+- **DP-OPD — Differentially Private On-Policy Distillation for Language
+  Models** (Khadem, Mousavi, Fang, Liu, Apr 2026)
+  [[arXiv:2604.04461]](https://arxiv.org/abs/2604.04461) ·
+  [[Code]](https://github.com/khademfatemeh/dp_opd)
+  *First DP-aware OPD framework. The student is fine-tuned with **DP-SGD
+  on the private corpus**, while a **frozen, public teacher** scores
+  every continuation token of the student's own rollouts. Privacy is
+  consumed entirely by the student updates (per-example gradient
+  clipping + Gaussian noise + RDP/subsampling accountant); teacher
+  inference is internal computation and consumes **zero privacy
+  budget** because the teacher is never released. Loss = GKD with
+  interpolated divergence \(\beta\in[0,1]\) (β=0 forward-KL, β=0.5 JSD,
+  β=1 reverse-KL); on-policy mixing rate \(\lambda\in[0,1]\) trades
+  rollout cost for distribution alignment.
+  Why on-policy matters more under DP: **DP-SGD noise amplifies
+  exposure bias** — small local mistakes compound rapidly along
+  autoregressive rollouts, so matching the teacher on **states the
+  student actually visits** is critical. At ε=2.0 with
+  GPT-2-Large → DistilGPT-2 (9.5× compression), DP-OPD reaches
+  Yelp PPL **41.68 (vs DP-SGD 48.12, DistilDP 44.15)** and BigPatent
+  **30.63 (vs 41.80 / 32.43)** — **simultaneously outperforming the
+  synthesis-based DistilDP while collapsing its 3-stage pipeline (DP
+  teacher training + DP synthetic generation + non-DP student training)
+  into a single DP loop on a single A6000**.
+  Notable counter-recipe: **β=0 (forward-KL) wins on perplexity**,
+  contrary to the "reverse-KL is better" wisdom from VLA-OPD / SDPO —
+  because perplexity rewards mode-covering rather than mode-seeking.
+  The objective shape should match the evaluation metric.*
+
+- *Open questions*: (i) DP-OPD with **tokenizer-mismatched** teacher
+  / student (would compose with HF GOLD); (ii) **rate-limited**
+  teacher-query budget; (iii) sensitive **control-code metadata**
+  requiring its own privatization.
+
 ### Cascade / Pruning + Distillation
 
 - **Cascade Distillation** (Mistral AI, 2026)
@@ -914,6 +960,21 @@ blog directly, and place each work in the most specific subsection.
   no work yet, but a natural next step combining MOPD-style
   multi-teacher with VLA-OPD's reverse-KL recipe.
 
+### Privacy-Preserving Compression
+
+> Use case: shrink a model trained on **sensitive data** (medical /
+> legal / financial / proprietary corpus) under a formal differential
+> privacy budget, suitable for on-device or regulated deployment.
+
+- **DP-OPD** ([arXiv:2604.04461](https://arxiv.org/abs/2604.04461)) —
+  At ε=2.0, **GPT-2-Large → DistilGPT-2 (9.5× compression)** reaches
+  Yelp PPL 41.68 (vs DP-SGD 48.12, DistilDP 44.15) and BigPatent 30.63
+  (vs 41.80 / 32.43), running on a **single A6000** instead of the
+  multi-GPU multi-day DistilDP pipeline.
+- *Open recipe*: pair DP-OPD with **HF GOLD** to enable
+  cross-tokenizer DP distillation (e.g., LLaMA student trained on
+  private medical text with a public Qwen teacher).
+
 ### Code & Math
 
 - **SDPO** on LiveCodeBench v6.
@@ -965,6 +1026,7 @@ blog directly, and place each work in the most specific subsection.
 | **VLA-OPD-LIBERO / RoboTwin** | 2026 | Reverse-KL OPD for VLA robot models (1-demo recipe) | [arXiv:2603.26666](https://arxiv.org/abs/2603.26666) |
 | **Lightning-OPD-Qwen3-8B** | 2026 (NVIDIA) | **Offline OPD** with Teacher Consistency; AIME 2024 69.9 % in 30 GPU-hours, 4× speedup | [arXiv:2604.13010](https://arxiv.org/abs/2604.13010) |
 | **Lightning-OPD-Qwen3-30B-A3B** (MoE) | 2026 (NVIDIA) | First single-node (8×H100) OPD on 30B-MoE; AIME 2024 71.0 % / LCBv5 60.8 % | [arXiv:2604.13010](https://arxiv.org/abs/2604.13010) |
+| **DP-OPD-DistilGPT-2** | 2026 | First differentially private OPD; ε=2.0, Yelp PPL 41.68 / BigPatent PPL 30.63 (beats DistilDP) | [arXiv:2604.04461](https://arxiv.org/abs/2604.04461) |
 
 ---
 
@@ -998,6 +1060,11 @@ blog directly, and place each work in the most specific subsection.
   pre-computed teacher log-probs; the most resource-efficient OPD
   recipe to date (4× faster than standard OPD; 30B-MoE on a single
   8×H100 node). <https://github.com/jet-ai-projects/Lightning-OPD>
+
+- **DP-OPD** (Khadem et al.) — differentially private OPD reference
+  implementation with DP-SGD on the student and a frozen public
+  teacher. Single-GPU, RDP-accountant compatible.
+  <https://github.com/khademfatemeh/dp_opd>
 
 - **MiniLLM (Microsoft LMOps)** — official PyTorch implementation of
   reverse-KL on-policy distillation for LLMs.
@@ -1184,6 +1251,17 @@ limitations of OPD that are worth tracking:
     *single*-teacher case via offline pre-computation; but multi-teacher
     (MOPD), cross-stage (OPCSD), and self-evolving teacher schemes
     cannot easily reuse the same trick — an open infra problem.
+14. **Privacy threat model is incomplete for OPD.** *DP-OPD*
+    ([arXiv:2604.04461](https://arxiv.org/abs/2604.04461)) shows that
+    OPD can be made formally DP at the student updates, but: (i) the
+    **public teacher** must genuinely be independent of the private
+    corpus — usually true for off-the-shelf models, hard to verify
+    in industry settings; (ii) **control codes / metadata** (e.g.,
+    business categories, CPC codes) used to condition the prompt may
+    leak distributional information that is itself sensitive; (iii)
+    **rate-limited or pay-per-token** teacher endpoints shift the
+    bottleneck from compute to query budget. End-to-end privacy
+    guarantees beyond the student gradient remain an open problem.
 
 ---
 
@@ -1258,6 +1336,22 @@ limitations of OPD that are worth tracking:
    Clip **the reward**, not the importance ratio:
    \(\tilde{R} = \max(\text{sg}(R),\ \log\frac{\alpha}{1-\alpha})\).
    Prevents heavy-tailed negative rewards from dominating.
+9. **Match the divergence to the evaluation metric.** *DP-OPD*
+   ([arXiv:2604.04461](https://arxiv.org/abs/2604.04461)) shows that
+   when the goal is **perplexity / coverage** (e.g., language modeling
+   on private text), **forward-KL (β=0)** beats reverse-KL because
+   perplexity rewards mode-covering over mode-seeking. The reverse-KL
+   default favored by VLA-OPD / SDPO / OPSDC is correct for
+   **decision / reasoning** tasks where mode-seeking precision matters.
+   Pick β by the downstream metric, not by tradition. A practical
+   compromise: **JSD (β≈0.5)** with on-policy mixing rate **λ≈0.5**
+   gives the best empirical PPL / throughput tradeoff in DP-OPD.
+10. **Use OPD instead of RL when running under DP-SGD.** Same DP-OPD
+    paper observes that **DP noise amplifies exposure bias**: on-policy
+    targets on student-visited states, rather than teacher-forced
+    targets, are dramatically more sample-efficient under privacy
+    noise. Translate: **OPD is strictly preferable to off-policy KD or
+    DP-RL whenever the privacy budget is the binding constraint.**
 
 ---
 
