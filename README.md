@@ -1,5 +1,9 @@
 # Awesome On-Policy Distillation [Awesome](https://awesome.re)
 
+<p align="center">
+  <img src="assets/banner.png" alt="Awesome On-Policy Distillation" width="100%">
+</p>
+
 > A curated list of resources dedicated to **On-Policy Distillation (OPD)** —
 > a family of post-training paradigms that fuse the *sample efficiency of
 > distillation* with the *distribution matching of on-policy reinforcement
