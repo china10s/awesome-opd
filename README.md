@@ -25,10 +25,10 @@ A typical OPD step is:
 
 The framework unifies many recent ideas — GKD, MiniLLM, SDFT, SDPO, DASD,
 MOPD, OPSD, OPCD, OPSDC, TAID, SPIN, Veto, EOPD, REOPOLD, Video-OPD,
-GOLD, Cascade Distillation, SKD / SpecKD, **On-Policy Cross-Stage
-Distillation (OPCSD)** — and has been adopted in the post-training recipes
-of **GLM-5**, **Qwen3**, **MiMo-V2-Flash**, **Ministral 3**,
-**DASD-4B-Thinking**, **Gemma 3**, and many others.
+VLA-OPD, **Lightning OPD**, GOLD, Cascade Distillation, SKD / SpecKD,
+**On-Policy Cross-Stage Distillation (OPCSD)** — and has been adopted in
+the post-training recipes of **GLM-5**, **Qwen3**, **MiMo-V2-Flash**,
+**Ministral 3**, **DASD-4B-Thinking**, **Gemma 3**, and many others.
 
 ---
 
@@ -59,6 +59,7 @@ blog directly, and place each work in the most specific subsection.
   - [Self-Play as Implicit On-Policy Distillation](#self-play-as-implicit-on-policy-distillation)
   - [Cross-Tokenizer / Cross-Family Distillation](#cross-tokenizer--cross-family-distillation)
   - [Multimodal & Embodied On-Policy Distillation](#multimodal--embodied-on-policy-distillation)
+  - [Offline / Resource-Efficient OPD](#offline--resource-efficient-opd)
   - [Cascade / Pruning + Distillation](#cascade--pruning--distillation)
   - [RL × Distillation Connections (Inverse RL, Imitation)](#rl--distillation-connections-inverse-rl-imitation)
 - [Applications](#applications)
@@ -720,6 +721,49 @@ blog directly, and place each work in the most specific subsection.
   TAID-LLM-1.5B; also fits here.
   [[arXiv:2501.16937]](https://arxiv.org/abs/2501.16937)
 
+### Offline / Resource-Efficient OPD
+
+> Standard OPD requires a **live multi-GPU teacher server co-hosted with
+> the student** for the entire training run, fragmenting compute and
+> putting trillion-parameter teachers out of reach for academic labs.
+> This line of work asks: *can the on-policy benefit be preserved without
+> the live teacher?*
+
+- **Lightning OPD — Efficient Post-Training for Large Reasoning Models
+  with Offline On-Policy Distillation** (NVIDIA, Apr 2026)
+  Yecheng Wu, Song Han, Han Cai.
+  [[arXiv:2604.13010]](https://arxiv.org/abs/2604.13010) ·
+  [[Code]](https://github.com/jet-ai-projects/Lightning-OPD)
+  *Replaces the live teacher server with a **one-time pre-computation**
+  of teacher log-probabilities over rollouts sampled from the SFT
+  reference policy, reused throughout training. The catch — a naïve
+  offline OPD silently underperforms — is traced to an overlooked
+  **design principle**: the SFT-stage and OPD-stage teachers must be the
+  **same model** (a property they call **Teacher Consistency**).
+  Violation introduces a gradient bias that hurts both online and
+  offline OPD, with the offline variant suffering more. A canonical
+  example of violation: Tinker / Thinking Machines uses **QwQ-32B SFT
+  data** but **Qwen3-32B OPD teacher**.
+  Theory (3 named theorems): under teacher consistency,
+  **(3.5) gradient discrepancy** between online and offline OPD is
+  bounded by \(G \cdot \sigma_A \cdot \sqrt{\chi^2(\pi_\theta \,\|\, \pi_{\text{ref}})}\),
+  zero at initialization;
+  **(3.6) shared fixed point** — when the teacher is representable, both
+  objectives have the same global optimum;
+  **(3.7) gradient decomposition** — \(\nabla J_{\text{off}} = \nabla J_{\text{on}} - \mathrm{Cov}_{\pi_{\text{ref}}}[w(x;\theta), f(x;\theta)]\),
+  with the covariance term acting as an **implicit trust region** that
+  prevents policy drift without an explicit KL penalty.
+  Numbers: Qwen3-8B-Base SFT → **AIME 2024 69.9 % in 30 GPU-hours
+  (4.0× speedup over standard OPD)**. First demonstration of OPD on
+  trillion-parameter-class **MoE without distributed serving infra**:
+  Qwen3-30B-A3B trained on a **single 8×H100 node** to **AIME 2024
+  71.0 % / LiveCodeBench v5 60.8 %**. Lowers the academic OPD barrier
+  by a roughly two-orders-of-magnitude factor.*
+
+- *Open question*: extending Lightning OPD to multi-teacher (MOPD) and
+  cross-stage (OPCSD) setups — Teacher Consistency would have to be
+  redefined per-stage / per-domain.
+
 ### Cascade / Pruning + Distillation
 
 - **Cascade Distillation** (Mistral AI, 2026)
@@ -884,6 +928,11 @@ blog directly, and place each work in the most specific subsection.
 - **MiMo-V2-Flash** on full math + code suite.
 - **Qwen3-8B + OPD** achieves AIME'24 74.4 %, MATH500 97.0 %,
   LiveCodeBench v5 60.3 %. ([Table 21, Qwen3 TR](https://arxiv.org/abs/2505.09388))
+- **Lightning-OPD-Qwen3-8B** — AIME'24 69.9 % in **30 GPU-hours**
+  (vs. 120 for standard OPD), and Qwen3-30B-A3B MoE on **a single
+  8×H100 node** at 71.0 % AIME / 60.8 % LCBv5 — the strongest
+  small-budget reasoning result to date.
+  [[arXiv:2604.13010]](https://arxiv.org/abs/2604.13010)
 
 ---
 
@@ -914,6 +963,8 @@ blog directly, and place each work in the most specific subsection.
 | **Revisiting-OPD-Qwen** | 2026 | Top-K + top-p local-support reverse-KL (cures tokenizer-mismatch & signal-imbalance) | [arXiv:2603.25562](https://arxiv.org/abs/2603.25562) |
 | **SCOPE-R1-Distill-Qwen-1.5B** | 2026 | Dual-path PPL-weighted (correct vs incorrect) OPD | [arXiv:2604.10688](https://arxiv.org/abs/2604.10688) |
 | **VLA-OPD-LIBERO / RoboTwin** | 2026 | Reverse-KL OPD for VLA robot models (1-demo recipe) | [arXiv:2603.26666](https://arxiv.org/abs/2603.26666) |
+| **Lightning-OPD-Qwen3-8B** | 2026 (NVIDIA) | **Offline OPD** with Teacher Consistency; AIME 2024 69.9 % in 30 GPU-hours, 4× speedup | [arXiv:2604.13010](https://arxiv.org/abs/2604.13010) |
+| **Lightning-OPD-Qwen3-30B-A3B** (MoE) | 2026 (NVIDIA) | First single-node (8×H100) OPD on 30B-MoE; AIME 2024 71.0 % / LCBv5 60.8 % | [arXiv:2604.13010](https://arxiv.org/abs/2604.13010) |
 
 ---
 
@@ -942,6 +993,11 @@ blog directly, and place each work in the most specific subsection.
 
 - **SCOPE official code** — Signal-Calibrated OPD with dual-path
   PPL-weighted training. <https://github.com/machine981/SCOPE>
+
+- **Lightning OPD** (NVIDIA, jet-ai-projects) — offline OPD with
+  pre-computed teacher log-probs; the most resource-efficient OPD
+  recipe to date (4× faster than standard OPD; 30B-MoE on a single
+  8×H100 node). <https://github.com/jet-ai-projects/Lightning-OPD>
 
 - **MiniLLM (Microsoft LMOps)** — official PyTorch implementation of
   reverse-KL on-policy distillation for LLMs.
@@ -1113,6 +1169,21 @@ limitations of OPD that are worth tracking:
     bad student prefixes is reliable for low-PPL prefixes (64.9 %) but
     drops to 45.4 % for high-PPL prefixes. Naïvely teaching from "fix
     this broken prefix" trajectories can inject more noise than signal.
+12. **Teacher inconsistency between SFT and OPD stages.** *Lightning
+    OPD* ([arXiv:2604.13010](https://arxiv.org/abs/2604.13010)) shows
+    that using *different* teachers in the SFT and OPD stages — a
+    convention silently inherited from RLVR pipelines — introduces a
+    persistent gradient bias that degrades **both online and offline
+    OPD**. Pinpointed in widely-used recipes (e.g., QwQ-32B SFT data
+    with Qwen3-32B OPD teacher in Tinker). A first-principles failure
+    mode that's invisible in the loss curve but compounds over training.
+13. **Live-teacher serving as the dominant cost.** Standard OPD requires
+    co-hosting student and teacher on the same GPU pool throughout
+    training, fragmenting compute and putting trillion-parameter
+    teachers out of academic reach. Lightning OPD removes this for the
+    *single*-teacher case via offline pre-computation; but multi-teacher
+    (MOPD), cross-stage (OPCSD), and self-evolving teacher schemes
+    cannot easily reuse the same trick — an open infra problem.
 
 ---
 
@@ -1122,6 +1193,17 @@ limitations of OPD that are worth tracking:
 > above. None of these are mandatory, but skipping any of them invites
 > one of the failure modes in the previous section.
 
+0. **Teacher Consistency** (Lightning OPD,
+   [arXiv:2604.13010](https://arxiv.org/abs/2604.13010))
+   *Use the same teacher model in the **SFT stage** that produces your
+   reference policy and in the **OPD stage** that scores rollouts.*
+   This sounds trivial but is broken in practice — e.g., Thinking
+   Machines pairs **QwQ-32B SFT data** with a **Qwen3-32B OPD teacher**.
+   Lightning OPD proves the mismatch yields a gradient bias bounded by
+   \(G \cdot \sigma_\Delta \cdot \sqrt{\chi^2(\pi_\theta\|\pi_{\text{ref}})}\)
+   that strictly degrades both online *and* offline OPD. The cleanest
+   way to enforce it is to **regenerate your SFT data with the OPD
+   teacher** before starting the pipeline.
 1. **Pre-flight diagnosis (Rethinking OPD, [arXiv:2604.13016](https://arxiv.org/abs/2604.13016))**
    - Measure **overlap ratio** = (student top-k ∩ teacher top-k) / k at
      student-visited states. Successful OPD trends from ~72 % to ≥91 %;
@@ -1134,6 +1216,8 @@ limitations of OPD that are worth tracking:
    *Generate ~200K demonstrations from the teacher and run a brief SFT
    pass before OPD; use the teacher's training prompt format verbatim
    for the student rollouts.* Single biggest stability win in the paper.
+   **Bonus**: this is one of two ways (the other being SFT-data
+   regeneration) to satisfy the Teacher Consistency principle above.
 3. **KL anchor + golden mixture** (StableOPD,
    [arXiv:2604.08527](https://arxiv.org/abs/2604.08527))
    - Add a reference-model KL term against the **initial student
