@@ -282,6 +282,11 @@ the others.
 > feedback, or privileged info) as the teacher, then distill back into the
 > unconditioned policy.
 
+- **d-OPSD — Learning from the Self-future** (2026)
+[[arXiv:2606.18195]](https://arxiv.org/abs/2606.18195) ·
+[[Code]](https://github.com/xingzhejun/d-opsd-code)
+*Tailors OPSD to diffusion LLMs using self-generated answers as suffix
+conditioning and step-level supervision aligned with iterative denoising.*
 - **SDFT — Self-Distillation Fine-Tuning** (MIT, 2026)
 Idan Shenfeld, Mehul Damani, Jonas Hübotter, Pulkit Agrawal.
 **Self-Distillation Enables Continual Learning.**
