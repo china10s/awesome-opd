@@ -980,6 +980,9 @@ intersection.*
 > satisfied (sequence-level reward shaping rather than per-token
 > logit KL); exceptions are flagged.
 
+- **MultiAgent-OPD — Role-Specific Distillation in Hierarchical Agent Teams** (Alibaba Group / Zhejiang University, Oct 2026)
+[[arXiv:2610.23234]](https://arxiv.org/abs/2610.23234)
+*A frozen teacher supplies sampled reverse-KL supervision for the Searchers' own query and summary tokens. The Leader and Answerer learn from outcomes in the same shared policy.*
 - **SDPO — RL via Self-Distillation** (ETH / MIT) — see
 [Self-Distillation as On-Policy Learning](#self-distillation-as-on-policy-learning).
 - **AlignDistil — RLHF-Equivalent Distillation** (BJTU / Tencent, ACL 2025)
